@@ -49,14 +49,21 @@ class LoveLetter
     def playValidate(current_player, card_num, player_num, guess)
         card_num = card_num.to_i
         if card_num < 0 || card_num > 1
+            User(current_player).send "Please specify your card choice with 0 or 1."
             return false
         end
         card = $gametable[current_player]["hand"][card_num]
-        if ['guard', 'priest', 'baron', 'prince', 'king'].include? card && player_num == ""
-            User(current_player).send "#{card} requires you to target another player by numerical id."
-            return false
+        if ['guard', 'priest', 'baron', 'prince', 'king'].include?(card) && !player_num
+			# If the card should target someone, but doesn't, makes sure it's because player's only valid option is to discard
+            if validTargetsRemaining($gametable[current_player]["hand"][card_num] )
+                User(current_player).send "#{card} requires you to target another player by numerical id."
+                return false
+            else
+                User(current_player).send "You cannot discard a #{$gametable[current_player]["hand"][card_num]} unless there are no valid targets remaining. Please choose your other card, or choose a valid target. #{validTargets()}."
+                return false
+            end
         end
-        if card = "guard" && guess == ""
+        if card = "guard" && !guess
             User(current_player).send "To play a guard, please specify which of the following you guess the target has in their hand: guard, priest, baron, handmaid, prince, king, countess, or princess."
             return false
         end
