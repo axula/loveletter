@@ -56,14 +56,11 @@ class LoveLetter
         if ['guard', 'priest', 'baron', 'prince', 'king'].include?(card) && !player_num
 			# If the card should target someone, but doesn't, makes sure it's because player's only valid option is to discard
             if validTargetsRemaining($gametable[current_player]["hand"][card_num] )
-                User(current_player).send "#{card} requires you to target another player by numerical id."
-                return false
-            else
-                User(current_player).send "You cannot discard a #{$gametable[current_player]["hand"][card_num]} unless there are no valid targets remaining. Please choose your other card, or choose a valid target. #{validTargets()}."
+                User(current_player).send "#{card} requires you to target another player by numerical id. You cannot discard a #{$gametable[current_player]["hand"][card_num]} unless there are no valid targets remaining. Please choose your other card, or choose a valid target. #{validTargets()}."
                 return false
             end
         end
-        if card = "guard" && !guess
+        if card == "guard" && !guess
             User(current_player).send "To play a guard, please specify which of the following you guess the target has in their hand: guard, priest, baron, handmaid, prince, king, countess, or princess."
             return false
         end
@@ -128,15 +125,13 @@ class LoveLetter
     def validTargetsRemaining(card)
         roundPlayers = Array.new
         playersRemaining.each do |p|
-            unless $gametable[p]["discard"].last == "handmaid"
-                if p == $players[game_turn] && card == "prince"
-                    roundPlayers.push(p)
-                elsif p != $players[game_turn] && p != "prince"
+            unless !$gametable[p]["discards"].empty? && $gametable[p]["discards"].last == "handmaid"
+                if p == $players[$game_turn] && card == "prince"
                     roundPlayers.push(p)
                 end
             end
         end
-        return roundPlayers.empty?
+        return !roundPlayers.empty?
     end
     
     def playersRemaining()
@@ -270,7 +265,7 @@ class LoveLetter
                 end
                 Channel($game_channel).send "Current turn: #{current_player}"
                 $gametable[current_player]["hand"].push($deck.shift)
-                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('love letter play [id of card] [optional parameters]') Message the bot 'syntax [card name]' for the specific parameters of your card."
+                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('<3 play [id of card] [optional parameters]') Message the bot '<3 syntax [card name]' for the specific parameters of your card."
             end
         else
             s.reply "You must be in the game queue to start a new game."
@@ -353,21 +348,21 @@ class LoveLetter
         card.downcase!
         case card
             when "guard"
-                User(s.user.nick).send "Type: 'love letter play [id of card] [id of target player] [guess what card they have]', ex. 'love letter play 0 3 baron'"
+                User(s.user.nick).send "Type: '<3 play [id of card] [id of target player] [guess what card they have]', ex. '<3 play 0 3 baron'"
             when "priest"
-                User(s.user.nick).send "Type: 'love letter play [id of card] [id of target player]', ex. 'love letter play 1 2'"
+                User(s.user.nick).send "Type: '<3 play [id of card] [id of target player]', ex. '<3 play 1 2'"
             when "baron"
-                User(s.user.nick).send "Type: 'love letter play [id of card] [id of target player]', ex. 'love letter play 0, 1'"
+                User(s.user.nick).send "Type: '<3 play [id of card] [id of target player]', ex. '<3 play 0, 1'"
             when "handmaid"
-                User(s.user.nick).send "Type: 'love letter play [id of card]', ex. 'love letter play 1'"
+                User(s.user.nick).send "Type: '<3 play [id of card]', ex. '<3 play 1'"
             when "prince"
-                User(s.user.nick).send "Type: 'love letter play [id of card] [id of player]', ex. 'love letter play 0 0'"
+                User(s.user.nick).send "Type: '<3 play [id of card] [id of player]', ex. '<3 play 0 0'"
             when "king"
-                User(s.user.nick).send "Type: 'love letter play [id of card] [id of player]', ex. 'love letter play 1 0'"
+                User(s.user.nick).send "Type: '<3 play [id of card] [id of player]', ex. '<3 play 1 0'"
             when "countess"
-                User(s.user.nick).send "Type: 'love letter play [id of card]', ex. 'love letter play 0'"
+                User(s.user.nick).send "Type: '<3 play [id of card]', ex. '<3 play 0'"
             when "princess"
-                User(s.user.nick).send "Type: 'love letter play [id of card]', ex. 'love letter play 1'"
+                User(s.user.nick).send "Type: '<3 play [id of card]', ex. '<3 play 1'"
             else
                 User(s.user.nick).send "Please type the name of one of the following types of cards: guard, priest, baron, handmaid, prince, king, countess, or princess. Check your spelling."
         end
@@ -387,17 +382,25 @@ class LoveLetter
             $gametable[player]["hand"].delete_at(card_num)
             case cardType
                 when "guard"
-                    if $gametable[target]["hand"].include?(guess)
+                    if !guess
+                        Channel($game_channel).send "#{player} discards a guard with no effect."
+                    elsif $gametable[target]["hand"].include?(guess)
                         Channel($game_channel).send "#{player} played a guard on #{target}, with a guess of #{guess}. #{target} discards a #{guess}, and has been eliminated for the round."
                         $gametable[target]["discards"].push($gametable[target]["hand"].shift)
                     else
                         Channel($game_channel).send "#{player} played a guard on #{target}, with a guess of #{guess}. #{target} does not have a #{guess}."
                     end
                 when "priest"
-                    Channel($game_channel).send "#{player} played a priest on #{target}, and peeks at his or her hand."
-                    User(player).send "#{target}'s hand: #{$gametable[target]["hand"][0]}"
+                    if !player_num
+                        Channel($game_channel).send "#{player} discards a priest with no effect."
+                    else
+                        Channel($game_channel).send "#{player} played a priest on #{target}, and peeks at their hand."
+                        User(player).send "#{target}'s hand: #{$gametable[target]["hand"][0]}"
+                    end
                 when "baron"
-                    if cardScore($gametable[player]["hand"].first) > cardScore($gametable[target]["hand"].first)
+                    if !player_num
+                        Channel($game_channel).send "#{player} discards a baron with no effect."
+                    elsif cardScore($gametable[player]["hand"].first) > cardScore($gametable[target]["hand"].first)
                         Channel($game_channel).send "#{player} played a baron on #{target}, and compared hands in secret. #{target} discards a #{$gametable[target]["hand"].first} and is eliminated for the round."
                         User(target).send "#{player} has a #{$gametable[player]["hand"].first}."
                         $gametable[target]["discards"].push($gametable[target]["hand"].shift)
@@ -413,19 +416,28 @@ class LoveLetter
                 when "handmaid"
                     Channel($game_channel).send "#{player} played a handmaid, and cannot be targeted by other player's cards until the beginning of his or her next turn."
                 when "prince"
-                    if $gametable[target]["hand"].include?("princess")
+                    if !player_num
+                        Channel($game_channel).send "#{player} discards a prince with no effect."
+                    elsif $gametable[target]["hand"].include?("princess")
                         Channel($game_channel).send "#{player} played a prince. #{target} discards the princess and is eliminated for the round."
                         $gametable[target]["discards"].push($gametable[target]["hand"].shift)
                     else
                         Channel($game_channel).send "#{player} played a prince. #{target} discards a #{$gametable[target]["hand"].first} and draws a new card."
                         $gametable[target]["discards"].push($gametable[target]["hand"].shift)
                         $gametable[target]["hand"].push($deck.shift)
+                        User(target).send "Your hand: #{$gametable[target]["hand"].first}"
                     end
                 when "king"
-                    Channel($game_channel).send "#{player} played the king, and trades hands with #{target}."
-                    old_card = $gametable[player]["hand"].shift
-                    $gametable[player]["hand"].push( $gametable[target]["hand"].shift )
-                    $gametable[target]["hand"].push(old_card)
+                    if !player_num
+                        Channel($game_channel).send "#{player} discards the king with no effect."
+                    else
+                        Channel($game_channel).send "#{player} played the king, and trades hands with #{target}."
+                        old_card = $gametable[player]["hand"].shift
+                        $gametable[player]["hand"].push( $gametable[target]["hand"].shift )
+                        $gametable[target]["hand"].push(old_card)
+                        User(player).send "Your hand: #{$gametable[player]["hand"].first}"
+                        User(target).send "Your hand: #{$gametable[target]["hand"].first}"
+                    end
                 when "countess"
                     Channel($game_channel).send "#{player} played and discarded the countess."
                 when "princess"
@@ -448,6 +460,7 @@ class LoveLetter
                 $gametable.each do |name, data|
                     if data["hand"].length < 0
                         playerRanks[name] = cardScore(data["hand"].first)
+                        Channel($game_channel).send "#{name}: #{playerRanks[name]}"
                         roundEnd.push( "#{name} entrusts their letter to the #{data["hand"].first}" )
                     end
                 end
@@ -492,7 +505,7 @@ class LoveLetter
                 $game_round += 1
                 Channel($game_channel).send "Current turn: #{current_player}"
                 $gametable[current_player]["hand"].push($deck.shift)
-                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('love letter play [id of card] [optional parameters]') Message the bot 'syntax [card name]' for the specific parameters of your card."
+                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('<3 play [id of card] [optional parameters]') Message the bot '<3 syntax [card name]' for the specific parameters of your card."
             end
         end
     end
