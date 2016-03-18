@@ -156,6 +156,29 @@ class LoveLetter
         $winningTokens = 0
     end
 
+    match(/help/, method: :helper)
+    def helper(m)
+        user = m.user.nick
+        if game_start && $players.include?(user)
+            User(user).send "Check your hand: '<3 hand'"
+            User(user).send "Card quick reference: '<3 reference'"
+            User(user).send "Get the description of a specific card type: '<3 card [name of card]'"
+            User(user).send "Get the syntax to play a specific card: '<3 syntax [name of card]'"
+            User(user).send "See player scores: '<3 scores'"
+            User(user).send "Check discards for the current round: '<3 discards'"
+            User(user).send "Check how many cards remain in the deck: '<3 deck'"
+        elsif game_start # And requesting user is not currently in the game
+            User(user).send "Join the queue for the next game: '<3 join'"
+            User(user).send "Leave queue: '<3 unjoin'"
+            User(user).send "See the status of the current game: '<3 status'"
+        else
+            User(user).send "Join the queue: '<3 join'"
+            User(user).send "Leave queue: '<3 unjoin'"
+            User(user).send "Start a game: '<3 start game'"
+            User(user).send "See the status of a game: '<3 status'"
+        end
+    end
+
 	match(/game status/, method: :status)
     def status(l)
 		if $game_start
@@ -215,7 +238,9 @@ class LoveLetter
 	# Starts the game and sets up the deck
     match(/start game/, method: :start)
     def start(s)
-        if $join_list.include?(s.user.nick)
+        if $game_start
+            s.reply "A game is already in progress."
+        elsif $join_list.include?(s.user.nick)
             if $join_list.length < 2
                 s.reply "You can't play by yourself."
             else
@@ -251,7 +276,7 @@ class LoveLetter
                         "discards" => Array.new }
                 }
                 # Announce the start of the game
-                Channel($game_channel).send "A new game has started!"
+                Channel($game_channel).send "A new game has started! The first player to receive #{$winningTokens} tokens wins the Princess's heart."
                 Channel($game_channel).send "Turn order: #{$players.join(", ")}"
                 # Deal one card to all players
                 $gametable.each {|name, x|
@@ -265,10 +290,35 @@ class LoveLetter
                 end
                 Channel($game_channel).send "Current turn: #{current_player}"
                 $gametable[current_player]["hand"].push($deck.shift)
-                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('<3 play [id of card] [optional parameters]') Message the bot '<3 syntax [card name]' for the specific parameters of your card."
+                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('<3 play [id of card] [optional parameters]') Message the bot '<3 syntax [card name]' for the specific parameters of your card. Message the bot '<3 reference' for a quick look at the effects of each card type."
             end
         else
             s.reply "You must be in the game queue to start a new game."
+        end
+    end
+
+    # Allows one of the current players to abort an in progress game
+    match(/abort/, method: :abortgame)
+    def abortgame(m)
+        if $game_start
+            if $players.include? m.user.nick
+                Channel($game_channel).send "#{m.user.nick} has aborted the current game."
+                finalScores = Hash.new
+                $gametable.each do |name, data|
+                    finalScores[name] = data["tokens"]
+                end
+                finalScores.sort_by {|k,v| v}.to_h
+                scores = Array.new
+                finalScores.each do |name, tokens|
+                    scores.push( "#{name}: #{tokens} tokens" )
+                end
+                Channel($game_channel).send "Final scores - #{scores.join(", ")}"
+                resetGame()
+            else
+                m.reply "You cannot abort a game of Love Letter unless you are an active player."
+            end
+        else
+            m.reply "There is no game of Love Letter currently in progress."
         end
     end
 
@@ -505,7 +555,7 @@ class LoveLetter
                 $game_round += 1
                 Channel($game_channel).send "Current turn: #{current_player}"
                 $gametable[current_player]["hand"].push($deck.shift)
-                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('<3 play [id of card] [optional parameters]') Message the bot '<3 syntax [card name]' for the specific parameters of your card."
+                User(current_player).send "Your current cards are 0:#{$gametable[current_player]['hand'][0]} and 1:#{$gametable[current_player]['hand'][1]}. Remaining players are: #{validTargets()}. Please choose one card to play ('<3 play [id of card] [optional parameters]') Message the bot '<3 syntax [card name]' for the specific parameters of your card. Message the bot '<3 reference' for a quick look at the effects of each card type."
             end
         end
     end
