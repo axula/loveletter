@@ -40,6 +40,7 @@ class LoveLetter
             Channel($game_channel).send "These three cards have been discarded: #{$twopldiscards.join(", ")}."
         end
         $gametable.each do |player, data|
+            $gametable[player]["discards"] = Array.new
             $gametable[player]["hand"] = Array.new
             $gametable[player]["hand"].push($deck.shift)
             User(player).send "Your hand: #{data["hand"].join(", ")}"
@@ -60,7 +61,7 @@ class LoveLetter
                 return false
             end
         end
-        if card == "guard" && !guess
+        if card == "guard" && player_num && !guess
             User(current_player).send "To play a guard, please specify which of the following you guess the target has in their hand: guard, priest, baron, handmaid, prince, king, countess, or princess."
             return false
         end
@@ -113,7 +114,7 @@ class LoveLetter
     def validTargets()
         result = Array.new
         playersRemaining.each do |p|
-            if $gametable[p]["discards"].any? && $gametable[p]["discards"].last == "handmaid"
+            if p != $players[$game_turn] && $gametable[p]["discards"].any? && $gametable[p]["discards"].last == "handmaid"
                 result.push( "immune: #{p} (handmaid)" )
             else
                 result.push( "#{$players.index(p)}: #{p}" )
@@ -123,15 +124,16 @@ class LoveLetter
     end
 
     def validTargetsRemaining(card)
-        roundPlayers = Array.new
         playersRemaining.each do |p|
-            unless !$gametable[p]["discards"].empty? && $gametable[p]["discards"].last == "handmaid"
-                if p == $players[$game_turn] && card == "prince"
-                    roundPlayers.push(p)
-                end
+            if p == $players[$game_turn] && card == "prince"
+                return true
+            elsif p != $players[$game_turn] && $gametable[p]["discards"].empty?
+                return true
+            elsif p != $players[$game_turn] && $gametable[p]["discards"].last != "handmaid"
+                return true
             end
         end
-        return !roundPlayers.empty?
+        return false
     end
     
     def playersRemaining()
@@ -159,7 +161,7 @@ class LoveLetter
     match(/help/, method: :helper)
     def helper(m)
         user = m.user.nick
-        if game_start && $players.include?(user)
+        if $game_start && $players.include?(user)
             User(user).send "Check your hand: '<3 hand'"
             User(user).send "Card quick reference: '<3 reference'"
             User(user).send "Get the description of a specific card type: '<3 card [name of card]'"
@@ -167,7 +169,7 @@ class LoveLetter
             User(user).send "See player scores: '<3 scores'"
             User(user).send "Check discards for the current round: '<3 discards'"
             User(user).send "Check how many cards remain in the deck: '<3 deck'"
-        elsif game_start # And requesting user is not currently in the game
+        elsif $game_start # And requesting user is not currently in the game
             User(user).send "Join the queue for the next game: '<3 join'"
             User(user).send "Leave queue: '<3 unjoin'"
             User(user).send "See the status of the current game: '<3 status'"
@@ -179,7 +181,7 @@ class LoveLetter
         end
     end
 
-	match(/game status/, method: :status)
+	match(/status/, method: :status)
     def status(l)
 		if $game_start
             player_list = Array.new
@@ -339,7 +341,7 @@ class LoveLetter
     def alldiscards(m)
         playerDiscards = Array.new
         if $players.length == 2
-            playerDiscards.push( "#{$twopldiscards.join(", ")}, " )
+            playerDiscards.push( "#{$twopldiscards.join(", ")}" )
         end
         $gametable.each do |name, data|
             if data["discards"].empty?
@@ -422,9 +424,9 @@ class LoveLetter
     def love_play(m, card_num, player_num, guess)
         if m.user.nick == $players[$game_turn] && playValidate(m.user.nick, card_num, player_num, guess)
             card_num = card_num.to_i
-            player_num = player_num.to_i
             player = $players[$game_turn]
             if player_num
+                player_num = player_num.to_i
                 target = $players[player_num]
             end
             cardType = $gametable[player]["hand"][card_num]
@@ -508,9 +510,8 @@ class LoveLetter
                 playerRanks = Hash.new
                 roundEnd = Array.new
                 $gametable.each do |name, data|
-                    if data["hand"].length < 0
+                    if !data["hand"].empty?
                         playerRanks[name] = cardScore(data["hand"].first)
-                        Channel($game_channel).send "#{name}: #{playerRanks[name]}"
                         roundEnd.push( "#{name} entrusts their letter to the #{data["hand"].first}" )
                     end
                 end
